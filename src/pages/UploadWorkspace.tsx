@@ -3,10 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Upload, Image, Download, X, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PublicLayout from "@/components/PublicLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
 
 type ProcessingState = "idle" | "uploading" | "processing" | "done";
 
 const UploadWorkspace = () => {
+  const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
@@ -32,13 +36,34 @@ const UploadWorkspace = () => {
     [handleFile]
   );
 
+  const saveUploadRecord = async (fileName: string, fileSize: number, originalUrl: string, processedUrl: string | null) => {
+    if (!user) return;
+    const { error } = await supabase.from("uploads").insert({
+      user_id: user.id,
+      file_name: fileName,
+      file_size: fileSize,
+      original_url: originalUrl,
+      result_url: processedUrl,
+      status: "completed",
+    });
+    if (error) {
+      console.error("Failed to save upload record:", error);
+    }
+  };
+
   const handleProcess = () => {
     setState("uploading");
-    // Simulate processing (will be replaced with real API)
     setTimeout(() => setState("processing"), 1000);
-    setTimeout(() => {
-      setResultUrl(preview); // placeholder — real API will return processed URL
+    setTimeout(async () => {
+      const processedUrl = preview; // placeholder — real API will return processed URL
+      setResultUrl(processedUrl);
       setState("done");
+
+      // Save to database so it appears in Recent Uploads
+      if (file) {
+        await saveUploadRecord(file.name, file.size, preview || "", processedUrl || null);
+        toast({ title: "Processing complete", description: "Image saved to your uploads." });
+      }
     }, 3000);
   };
 
