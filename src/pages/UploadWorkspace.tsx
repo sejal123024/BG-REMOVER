@@ -36,19 +36,28 @@ const UploadWorkspace = () => {
     [handleFile]
   );
 
-  const saveUploadRecord = async (fileName: string, fileSize: number, originalUrl: string, processedUrl: string | null) => {
+  const saveUploadRecord = async (fileName: string, fileSize: number, originalDataUrl: string, resultDataUrl: string | null) => {
     if (!user) return;
     const { error } = await supabase.from("uploads").insert({
       user_id: user.id,
       file_name: fileName,
       file_size: fileSize,
-      original_url: originalUrl,
-      result_url: processedUrl,
-      status: "completed",
+      original_url: originalDataUrl,
+      result_url: resultDataUrl,
+      status: "done",
     });
     if (error) {
       console.error("Failed to save upload record:", error);
     }
+  };
+
+  const fileToDataUrl = (f: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
+    });
   };
 
   const handleProcess = () => {
@@ -59,9 +68,10 @@ const UploadWorkspace = () => {
       setResultUrl(processedUrl);
       setState("done");
 
-      // Save to database so it appears in Recent Uploads
+      // Save to database with data URL so it persists
       if (file) {
-        await saveUploadRecord(file.name, file.size, preview || "", processedUrl || null);
+        const dataUrl = await fileToDataUrl(file);
+        await saveUploadRecord(file.name, file.size, dataUrl, dataUrl);
         toast({ title: "Processing complete", description: "Image saved to your uploads." });
       }
     }, 3000);
