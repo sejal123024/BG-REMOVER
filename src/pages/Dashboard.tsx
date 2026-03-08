@@ -73,9 +73,9 @@ const Dashboard = () => {
               <h1 className="font-display text-3xl font-bold">Dashboard</h1>
               <p className="text-muted-foreground mt-1">Welcome back! Here's your overview.</p>
             </div>
-            <Button variant="hero" asChild>
+            <Button variant="hero" size="lg" asChild className="shadow-lg shadow-primary/25 animate-pulse hover:animate-none text-base px-8 py-3">
               <Link to="/upload">
-                <Upload className="h-4 w-4 mr-2" />
+                <Upload className="h-5 w-5 mr-2" />
                 New Upload
               </Link>
             </Button>
