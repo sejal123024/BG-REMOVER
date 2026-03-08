@@ -36,12 +36,37 @@ const UploadWorkspace = () => {
     setState("uploading");
     // Simulate processing (will be replaced with real API)
     setTimeout(() => setState("processing"), 1000);
-    setTimeout(() => setState("done"), 3000);
+    setTimeout(() => {
+      setResultUrl(preview); // placeholder — real API will return processed URL
+      setState("done");
+    }, 3000);
+  };
+
+  const handleDownload = async () => {
+    const url = resultUrl || preview;
+    if (!url) return;
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      const baseName = file?.name?.replace(/\.[^.]+$/, "") || "image";
+      a.download = `${baseName}-no-bg.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // fallback: open in new tab
+      window.open(url, "_blank");
+    }
   };
 
   const reset = () => {
     setFile(null);
     setPreview(null);
+    setResultUrl(null);
     setState("idle");
   };
 
