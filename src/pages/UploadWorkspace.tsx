@@ -187,7 +187,7 @@ const UploadWorkspace = () => {
                   )}
                   {state === "done" && (
                     <>
-                      <Button variant="hero" size="lg">
+                      <Button variant="hero" size="lg" onClick={handleDownload}>
                         <Download className="h-4 w-4 mr-2" />
                         Download PNG
                       </Button>
