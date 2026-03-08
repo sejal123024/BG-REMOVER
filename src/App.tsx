@@ -8,7 +8,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
 import Features from "./pages/Features";
-import ApiDocs from "./pages/ApiDocs";
+
 import UploadWorkspace from "./pages/UploadWorkspace";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
@@ -29,7 +29,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/features" element={<Features />} />
-            <Route path="/api-docs" element={<ApiDocs />} />
+            
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/upload" element={<ProtectedRoute><UploadWorkspace /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
