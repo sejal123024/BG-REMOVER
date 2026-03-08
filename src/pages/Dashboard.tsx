@@ -133,25 +133,34 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {uploads.map((upload) => (
-                  <div key={upload.file_name + upload.created_at} className="flex items-center justify-between p-4 px-6 hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                        <Image className="h-4 w-4 text-muted-foreground" />
+                {uploads.map((upload) => {
+                  const displayUrl = upload.result_url || upload.original_url;
+                  return (
+                    <div key={upload.file_name + upload.created_at} className="flex items-center justify-between p-4 px-6 hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted overflow-hidden shrink-0">
+                          {displayUrl ? (
+                            <img src={displayUrl} alt={upload.file_name} className="h-full w-full object-cover" />
+                          ) : (
+                            <Image className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{upload.file_name}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {timeAgo(upload.created_at)}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{upload.file_name}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {timeAgo(upload.created_at)}
-                        </p>
-                      </div>
+                      <Button variant="ghost" size="sm" asChild>
+                        <a href={displayUrl || "#"} download={upload.file_name} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="sm">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
