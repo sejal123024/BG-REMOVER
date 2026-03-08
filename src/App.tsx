@@ -7,6 +7,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
+import Features from "./pages/Features";
+import ApiDocs from "./pages/ApiDocs";
 import UploadWorkspace from "./pages/UploadWorkspace";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
