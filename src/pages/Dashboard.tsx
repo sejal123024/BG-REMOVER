@@ -11,7 +11,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [credits, setCredits] = useState<{ total_credits: number; used_today: number } | null>(null);
-  const [uploads, setUploads] = useState<{ file_name: string; created_at: string; status: string }[]>([]);
+  const [uploads, setUploads] = useState<{ file_name: string; created_at: string; status: string; result_url: string | null; original_url: string }[]>([]);
   const [totalUploads, setTotalUploads] = useState(0);
 
   useEffect(() => {
