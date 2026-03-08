@@ -9,6 +9,7 @@ type ProcessingState = "idle" | "uploading" | "processing" | "done";
 const UploadWorkspace = () => {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [state, setState] = useState<ProcessingState>("idle");
   const [dragActive, setDragActive] = useState(false);
 
