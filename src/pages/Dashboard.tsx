@@ -22,7 +22,7 @@ const Dashboard = () => {
 
       const [creditsRes, uploadsRes, countRes] = await Promise.all([
         supabase.from("credits").select("total_credits, used_today").eq("user_id", user.id).single(),
-        supabase.from("uploads").select("file_name, created_at, status").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
+        supabase.from("uploads").select("file_name, created_at, status, result_url, original_url").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
         supabase.from("uploads").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       ]);
 
