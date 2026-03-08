@@ -28,6 +28,8 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/features" element={<Features />} />
+            <Route path="/api-docs" element={<ApiDocs />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/upload" element={<ProtectedRoute><UploadWorkspace /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
