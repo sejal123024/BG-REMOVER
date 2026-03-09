@@ -16,6 +16,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
+import OAuthInitiate from "./pages/OAuthInitiate";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/features" element={<Features />} />
             
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/~oauth/initiate" element={<OAuthInitiate />} />
             <Route path="/upload" element={<ProtectedRoute><UploadWorkspace /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/login" element={<Login />} />

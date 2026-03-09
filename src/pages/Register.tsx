@@ -30,7 +30,7 @@ const Register = () => {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -42,14 +42,17 @@ const Register = () => {
     if (error) {
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Account created!", description: "Check your email to verify your account." });
-      navigate("/dashboard");
+      if (data.session) {
+        navigate("/dashboard");
+      } else {
+        toast({ title: "Account created!", description: "Check your email to verify your account." });
+      }
     }
   };
 
   const handleGoogle = async () => {
     const { error } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/~oauth/initiate`,
     });
     if (error) {
       toast({ title: "Google signup failed", description: String(error), variant: "destructive" });

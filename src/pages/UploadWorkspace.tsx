@@ -16,6 +16,9 @@ const UploadWorkspace = () => {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [state, setState] = useState<ProcessingState>("idle");
   const [dragActive, setDragActive] = useState(false);
+  const WEBHOOK_URL =
+    ((import.meta.env.VITE_BG_REMOVE_WEBHOOK_URL as string) || "").trim() ||
+    "https://sejalkumavat.app.n8n.cloud/webhook/bg-remover";
 
   const handleFile = useCallback((f: File) => {
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -60,21 +63,149 @@ const UploadWorkspace = () => {
     });
   };
 
-  const handleProcess = () => {
+  const blobToDataUrl = (b: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = reject;
+      r.readAsDataURL(b);
+    });
+
+  const sendToWebhook = async (f: File): Promise<{ blob?: Blob; url?: string }> => {
+    const SEND_MODE = ((import.meta.env.VITE_BG_SEND_MODE as string) || "auto").toLowerCase();
+    const sanitizeUrl = (raw: unknown): string | null => {
+      if (typeof raw !== "string") return null;
+      const s = raw.trim().replace(/^`+|`+$/g, "").replace(/^"+|"+$/g, "");
+      try {
+        // Basic URL validity check
+        const u = new URL(s);
+        return u.href;
+      } catch {
+        return s || null;
+      }
+    };
+    // Strategy: prefer multipart in browser to avoid CORS preflight; binary as fallback or if forced
+    const tryForm = async () => {
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      const res = await fetch(WEBHOOK_URL, { method: "POST", body: fd });
+      if (!res.ok) throw new Error(`form ${res.status}`);
+      const ct = res.headers.get("content-type") || "";
+      if (ct.startsWith("image/")) {
+        return { blob: await res.blob() };
+      }
+      if (ct.includes("application/json")) {
+        const j = (await res.json().catch(() => ({}))) as Partial<{
+          url?: string;
+          result_url?: string;
+          image_url?: string;
+          myField?: string;
+          secure_url?: string;
+        }>;
+        const u =
+          sanitizeUrl(j?.result_url) ||
+          sanitizeUrl(j?.url) ||
+          sanitizeUrl(j?.image_url) ||
+          sanitizeUrl(j?.myField) ||
+          sanitizeUrl(j?.secure_url);
+        if (u) return { url: u };
+      }
+      if (ct.startsWith("text/")) {
+        const t = await res.text();
+        const u = sanitizeUrl(t);
+        if (u) return { url: u };
+      }
+      throw new Error("form unsupported response");
+    };
+    const tryBinary = async () => {
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        // Do not set Content-Type to avoid forcing preflight; the browser will set it
+        body: f,
+      });
+      if (!res.ok) throw new Error(`binary ${res.status}`);
+      const ct = res.headers.get("content-type") || "";
+      if (ct.startsWith("image/")) {
+        return { blob: await res.blob() };
+      }
+      if (ct.includes("application/json")) {
+        const j = (await res.json().catch(() => ({}))) as Partial<{
+          url?: string;
+          result_url?: string;
+          image_url?: string;
+          myField?: string;
+          secure_url?: string;
+        }>;
+        const u =
+          sanitizeUrl(j?.result_url) ||
+          sanitizeUrl(j?.url) ||
+          sanitizeUrl(j?.image_url) ||
+          sanitizeUrl(j?.myField) ||
+          sanitizeUrl(j?.secure_url);
+        if (u) return { url: u };
+      }
+      if (ct.startsWith("text/")) {
+        const t = await res.text();
+        const u = sanitizeUrl(t);
+        if (u) return { url: u };
+      }
+      throw new Error("binary unsupported response");
+    };
+    if (SEND_MODE === "form") {
+      try {
+        return await tryForm();
+      } catch {
+        return await tryBinary();
+      }
+    }
+    if (SEND_MODE === "binary") {
+      try {
+        return await tryBinary();
+      } catch {
+        return await tryForm();
+      }
+    }
+    // auto (default)
+    try {
+      return await tryForm();
+    } catch {
+      return await tryBinary();
+    }
+  };
+
+  const handleProcess = async () => {
+    if (!file) return;
     setState("uploading");
-    setTimeout(() => setState("processing"), 1000);
-    setTimeout(async () => {
-      const processedUrl = preview; // placeholder — real API will return processed URL
-      setResultUrl(processedUrl);
+    setTimeout(() => setState("processing"), 300);
+    try {
+      const result = await sendToWebhook(file);
+      let outUrl: string | null = null;
+      if (result.blob) {
+        outUrl = URL.createObjectURL(result.blob);
+      } else if (result.url) {
+        outUrl = result.url;
+      } else {
+        outUrl = preview;
+      }
+      setResultUrl(outUrl);
       setState("done");
 
-      // Save to database with data URL so it persists
-      if (file) {
-        const dataUrl = await fileToDataUrl(file);
-        await saveUploadRecord(file.name, file.size, dataUrl, dataUrl);
-        toast({ title: "Processing complete", description: "Image saved to your uploads." });
-      }
-    }, 3000);
+      // Persist record
+      const originalDataUrl = await fileToDataUrl(file);
+      const resDataUrl =
+        result.blob ? await blobToDataUrl(result.blob) : outUrl || originalDataUrl;
+      await saveUploadRecord(file.name, file.size, originalDataUrl, resDataUrl);
+      toast({ title: "Processing complete", description: "Image processed and saved." });
+    } catch (e: unknown) {
+      console.error("Webhook error:", e);
+      setState("idle");
+      toast({
+        title: "Processing failed",
+        description:
+          "Could not reach the background-removal service. Ensure the webhook is active (n8n test mode requires 'Execute workflow' before calling).",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDownload = async () => {
@@ -196,10 +327,9 @@ const UploadWorkspace = () => {
                   >
                     {state === "done" ? (
                       <img
-                        src={preview!}
+                        src={(resultUrl || preview)!}
                         alt="Processed"
                         className="max-h-full max-w-full object-contain"
-                        style={{ filter: "hue-rotate(10deg)" }}
                       />
                     ) : state === "processing" || state === "uploading" ? (
                       <div className="flex flex-col items-center gap-3">
