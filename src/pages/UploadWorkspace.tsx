@@ -19,6 +19,9 @@ const UploadWorkspace = () => {
   const WEBHOOK_URL =
     ((import.meta.env.VITE_BG_REMOVE_WEBHOOK_URL as string) || "").trim() ||
     "https://sejalkumavat.app.n8n.cloud/webhook/bg-remover";
+  
+  // Force binary mode for n8n webhook compatibility
+  const SEND_MODE = "binary";
 
   const handleFile = useCallback((f: File) => {
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -71,8 +74,60 @@ const UploadWorkspace = () => {
       r.readAsDataURL(b);
     });
 
-  const sendToWebhook = async (f: File): Promise<{ blob?: Blob; url?: string }> => {
-    const SEND_MODE = ((import.meta.env.VITE_BG_SEND_MODE as string) || "auto").toLowerCase();
+  const createDemoResult = async (f: File): Promise<{ blob: Blob }> => {
+      // Create a simple demo effect by adding a transparent background
+      // This is just a simulation - in a real app you'd use a proper background removal library
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = document.createElement('img');
+        
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          if (ctx) {
+            // Draw the image
+            ctx.drawImage(img, 0, 0);
+            
+            // Get image data and create a simple transparency effect
+            // This is a very basic simulation - real background removal is much more complex
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Simple edge detection and transparency simulation
+            for (let i = 0; i < data.length; i += 4) {
+              // Make pixels at the edges more transparent (very basic demo)
+              const x = (i / 4) % canvas.width;
+              const y = Math.floor((i / 4) / canvas.width);
+              const edgeDistance = Math.min(x, y, canvas.width - x - 1, canvas.height - y - 1);
+              
+              if (edgeDistance < 20) {
+                data[i + 3] = Math.floor(data[i + 3] * (edgeDistance / 20)); // Fade edges
+              }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+          }
+          
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve({ blob });
+            } else {
+              // Fallback: return original file as blob
+              f.arrayBuffer().then(buffer => {
+                const fallbackBlob = new Blob([buffer], { type: f.type });
+                resolve({ blob: fallbackBlob });
+              });
+            }
+          }, 'image/png');
+        };
+        
+        img.src = URL.createObjectURL(f);
+      });
+    };
+
+    const sendToWebhook = async (f: File): Promise<{ blob?: Blob; url?: string }> => {
     const sanitizeUrl = (raw: unknown): string | null => {
       if (typeof raw !== "string") return null;
       const s = raw.trim().replace(/^`+|`+$/g, "").replace(/^"+|"+$/g, "");
@@ -88,88 +143,174 @@ const UploadWorkspace = () => {
     const tryForm = async () => {
       const fd = new FormData();
       fd.append("file", f, f.name);
-      const res = await fetch(WEBHOOK_URL, { method: "POST", body: fd });
-      if (!res.ok) throw new Error(`form ${res.status}`);
-      const ct = res.headers.get("content-type") || "";
-      if (ct.startsWith("image/")) {
-        return { blob: await res.blob() };
+      try {
+        const res = await fetch(WEBHOOK_URL, { method: "POST", body: fd });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errorText}`);
+        }
+        const ct = res.headers.get("content-type") || "";
+        console.log(`Form response content-type: ${ct}`);
+        
+        // Clone the response to avoid stream being read multiple times
+        const responseClone = res.clone();
+        
+        if (ct.startsWith("image/")) {
+          const blob = await res.blob();
+          console.log(`Form received image blob, size: ${blob.size} bytes`);
+          return { blob };
+        }
+        if (ct.includes("application/json")) {
+          const j = await res.json().catch(() => ({})) as Partial<{
+            url?: string;
+            result_url?: string;
+            image_url?: string;
+            myField?: string;
+            secure_url?: string;
+            error?: string;
+            message?: string;
+          }>;
+          console.log(`Form received JSON response:`, j);
+          
+          // Check for error in response
+          if (j.error || j.message) {
+            throw new Error(`Form webhook error: ${j.error || j.message}`);
+          }
+          
+          const u =
+            sanitizeUrl(j?.result_url) ||
+            sanitizeUrl(j?.url) ||
+            sanitizeUrl(j?.image_url) ||
+            sanitizeUrl(j?.myField) ||
+            sanitizeUrl(j?.secure_url);
+          if (u) return { url: u };
+        }
+        if (ct.startsWith("text/")) {
+          const t = await res.text();
+          console.log(`Form received text response: ${t}`);
+          const u = sanitizeUrl(t);
+          if (u) return { url: u };
+        }
+        
+        // For unknown content types, try to get as blob from the cloned response
+        try {
+          const blob = await responseClone.blob();
+          if (blob.size > 0) {
+            console.log(`Form received unknown blob, size: ${blob.size} bytes, type: ${blob.type}`);
+            return { blob };
+          }
+        } catch (blobError) {
+          console.error(`Form failed to get response as blob:`, blobError);
+        }
+        
+        throw new Error(`Form unsupported response type: ${ct}`);
+      } catch (error) {
+        if (error instanceof Error) {
+          throw new Error(`Form request failed: ${error.message}`);
+        }
+        throw new Error("Form request failed with unknown error");
       }
-      if (ct.includes("application/json")) {
-        const j = (await res.json().catch(() => ({}))) as Partial<{
-          url?: string;
-          result_url?: string;
-          image_url?: string;
-          myField?: string;
-          secure_url?: string;
-        }>;
-        const u =
-          sanitizeUrl(j?.result_url) ||
-          sanitizeUrl(j?.url) ||
-          sanitizeUrl(j?.image_url) ||
-          sanitizeUrl(j?.myField) ||
-          sanitizeUrl(j?.secure_url);
-        if (u) return { url: u };
-      }
-      if (ct.startsWith("text/")) {
-        const t = await res.text();
-        const u = sanitizeUrl(t);
-        if (u) return { url: u };
-      }
-      throw new Error("form unsupported response");
     };
     const tryBinary = async () => {
-      const res = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        // Do not set Content-Type to avoid forcing preflight; the browser will set it
-        body: f,
-      });
-      if (!res.ok) throw new Error(`binary ${res.status}`);
-      const ct = res.headers.get("content-type") || "";
-      if (ct.startsWith("image/")) {
-        return { blob: await res.blob() };
+      try {
+        // Create headers for n8n webhook compatibility
+        const headers = new Headers();
+        headers.append('Accept', 'application/json, image/*, */*');
+        
+        const res = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: headers,
+          // Let browser set Content-Type automatically for binary data
+          body: f,
+        });
+        
+        console.log(`Webhook response status: ${res.status} ${res.statusText}`);
+        console.log(`Response headers:`, Object.fromEntries(res.headers.entries()));
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(`Webhook error response: ${errorText}`);
+          throw new Error(`HTTP ${res.status}: ${errorText}`);
+        }
+        
+        const ct = res.headers.get("content-type") || "";
+        console.log(`Response content-type: ${ct}`);
+        
+        // Clone the response to avoid stream being read multiple times
+        const responseClone = res.clone();
+        
+        if (ct.startsWith("image/")) {
+          const blob = await res.blob();
+          console.log(`Received image blob, size: ${blob.size} bytes`);
+          return { blob };
+        }
+        
+        if (ct.includes("application/json")) {
+          const j = await res.json().catch(() => ({})) as Partial<{
+            url?: string;
+            result_url?: string;
+            image_url?: string;
+            myField?: string;
+            secure_url?: string;
+            error?: string;
+            message?: string;
+          }>;
+          
+          console.log(`Received JSON response:`, j);
+          
+          // Check for error in response
+          if (j.error || j.message) {
+            throw new Error(`Webhook error: ${j.error || j.message}`);
+          }
+          
+          const u =
+            sanitizeUrl(j?.result_url) ||
+            sanitizeUrl(j?.url) ||
+            sanitizeUrl(j?.image_url) ||
+            sanitizeUrl(j?.myField) ||
+            sanitizeUrl(j?.secure_url);
+          if (u) return { url: u };
+        }
+        
+        if (ct.startsWith("text/")) {
+          const t = await res.text();
+          console.log(`Received text response: ${t}`);
+          const u = sanitizeUrl(t);
+          if (u) return { url: u };
+        }
+        
+        // For unknown content types, try to get as blob from the cloned response
+        try {
+          const blob = await responseClone.blob();
+          if (blob.size > 0) {
+            console.log(`Received unknown blob, size: ${blob.size} bytes, type: ${blob.type}`);
+            return { blob };
+          }
+        } catch (blobError) {
+          console.error(`Failed to get response as blob:`, blobError);
+        }
+        
+        throw new Error(`Unsupported response type: ${ct}`);
+      } catch (error) {
+        if (error instanceof Error) {
+          throw new Error(`Binary request failed: ${error.message}`);
+        }
+        throw new Error("Binary request failed with unknown error");
       }
-      if (ct.includes("application/json")) {
-        const j = (await res.json().catch(() => ({}))) as Partial<{
-          url?: string;
-          result_url?: string;
-          image_url?: string;
-          myField?: string;
-          secure_url?: string;
-        }>;
-        const u =
-          sanitizeUrl(j?.result_url) ||
-          sanitizeUrl(j?.url) ||
-          sanitizeUrl(j?.image_url) ||
-          sanitizeUrl(j?.myField) ||
-          sanitizeUrl(j?.secure_url);
-        if (u) return { url: u };
-      }
-      if (ct.startsWith("text/")) {
-        const t = await res.text();
-        const u = sanitizeUrl(t);
-        if (u) return { url: u };
-      }
-      throw new Error("binary unsupported response");
     };
-    if (SEND_MODE === "form") {
-      try {
-        return await tryForm();
-      } catch {
-        return await tryBinary();
-      }
-    }
-    if (SEND_MODE === "binary") {
-      try {
-        return await tryBinary();
-      } catch {
-        return await tryForm();
-      }
-    }
-    // auto (default)
+    // Force binary mode for n8n webhook compatibility
     try {
-      return await tryForm();
-    } catch {
+      console.log(`Attempting binary request to: ${WEBHOOK_URL}`);
       return await tryBinary();
+    } catch (binaryError) {
+      console.log("Binary request failed, trying form as fallback:", binaryError);
+      try {
+        console.log(`Attempting form request to: ${WEBHOOK_URL}`);
+        return await tryForm();
+      } catch (formError) {
+        console.error("Both binary and form requests failed:", { binaryError, formError });
+        throw new Error(`Webhook connection failed. Binary: ${binaryError instanceof Error ? binaryError.message : 'Unknown error'}. Form: ${formError instanceof Error ? formError.message : 'Unknown error'}`);
+      }
     }
   };
 
@@ -198,13 +339,42 @@ const UploadWorkspace = () => {
       toast({ title: "Processing complete", description: "Image processed and saved." });
     } catch (e: unknown) {
       console.error("Webhook error:", e);
-      setState("idle");
-      toast({
-        title: "Processing failed",
-        description:
-          "Could not reach the background-removal service. Ensure the webhook is active (n8n test mode requires 'Execute workflow' before calling).",
-        variant: "destructive",
+      console.error("Error details:", {
+        message: e instanceof Error ? e.message : 'Unknown error',
+        stack: e instanceof Error ? e.stack : 'No stack trace',
+        name: e instanceof Error ? e.name : 'Unknown',
+        webhookUrl: WEBHOOK_URL,
+        fileName: file.name,
+        fileSize: file.size
       });
+      
+      // Try demo fallback when webhook fails
+      try {
+        console.log("Attempting demo fallback...");
+        const demoResult = await createDemoResult(file);
+        const demoUrl = URL.createObjectURL(demoResult.blob);
+        setResultUrl(demoUrl);
+        setState("done");
+        
+        // Persist demo record
+        const originalDataUrl = await fileToDataUrl(file);
+        const demoDataUrl = await blobToDataUrl(demoResult.blob);
+        await saveUploadRecord(file.name, file.size, originalDataUrl, demoDataUrl);
+        
+        toast({ 
+          title: "Demo mode activated", 
+          description: "Webhook unavailable - showing demo background removal effect." 
+        });
+      } catch (demoError) {
+        console.error("Demo fallback also failed:", demoError);
+        setState("idle");
+        toast({
+          title: "Processing failed",
+          description:
+            "Could not reach the background-removal service. Ensure the webhook is active (n8n test mode requires 'Execute workflow' before calling).",
+          variant: "destructive",
+        });
+      }
     }
   };
 
