@@ -5,9 +5,9 @@ import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import PublicLayout from "@/components/PublicLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { signInWithGoogle } from "@/integrations/supabase/oauth";
 
 const Login = () => {
   const [showPw, setShowPw] = useState(false);
@@ -24,24 +24,109 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast({ 
+        title: "Invalid email format", 
+        description: "Please enter a valid email address.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    // Validate password
+    if (password.length < 1) {
+      toast({ 
+        title: "Password required", 
+        description: "Please enter your password.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      toast({ title: "Login failed", description: error.message, variant: "destructive" });
-    } else {
-      navigate("/dashboard");
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) {
+        console.error("Login error:", error);
+        let errorMessage = error.message;
+        
+        // Provide more user-friendly error messages
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "Invalid email or password. Please check your credentials and try again.";
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Please confirm your email address before logging in.";
+        } else if (error.message.includes("User not found")) {
+          errorMessage = "No account found with this email address.";
+        }
+        
+        toast({ 
+          title: "Login failed", 
+          description: errorMessage, 
+          variant: "destructive" 
+        });
+      } else {
+        console.log("Login successful:", data);
+        toast({ 
+          title: "Login successful!", 
+          description: "Welcome back!", 
+        });
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      console.error("Unexpected login error:", error);
+      toast({ 
+        title: "Login failed", 
+        description: "An unexpected error occurred. Please try again.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogle = async () => {
-    const { error } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/~oauth/initiate`,
-    });
-    if (error) {
-      toast({ title: "Google login failed", description: String(error), variant: "destructive" });
+  setLoading(true);
+  
+  try {
+    const result = await signInWithGoogle();
+    
+    if (result.success) {
+      toast({ 
+        title: "Redirecting to Google...", 
+        description: "Please complete the sign-in process in your browser.", 
+      });
+    } else {
+      console.error("Google login failed:", result.error);
+      
+      let errorMessage = result.error || "Unable to connect with Google";
+      
+      // Show suggestions if available
+      if (result.suggestions && result.suggestions.length > 0) {
+        errorMessage += "\n\nSuggestions:\n" + result.suggestions.map(s => `• ${s}`).join('\n');
+      }
+      
+      toast({ 
+        title: "Google login failed", 
+        description: errorMessage,
+        variant: "destructive" 
+      });
     }
-  };
+  } catch (error) {
+    console.error("Unexpected Google login error:", error);
+    toast({ 
+      title: "Google login failed", 
+      description: "An unexpected error occurred. Please try again or use email login.",
+      variant: "destructive" 
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <PublicLayout>

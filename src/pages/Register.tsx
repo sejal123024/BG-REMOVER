@@ -5,9 +5,9 @@ import { motion } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
 import PublicLayout from "@/components/PublicLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { signInWithGoogle } from "@/integrations/supabase/oauth";
 
 const Register = () => {
   const [showPw, setShowPw] = useState(false);
@@ -25,39 +25,133 @@ const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) {
-      toast({ title: "Password too short", description: "Minimum 8 characters required.", variant: "destructive" });
+    
+    // Validate name
+    if (fullName.trim().length < 2) {
+      toast({ 
+        title: "Name required", 
+        description: "Please enter your full name.", 
+        variant: "destructive" 
+      });
       return;
     }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast({ 
+        title: "Invalid email format", 
+        description: "Please enter a valid email address.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    // Validate password
+    if (password.length < 8) {
+      toast({ 
+        title: "Password too short", 
+        description: "Minimum 8 characters required.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: window.location.origin,
-      },
-    });
-    setLoading(false);
-    if (error) {
-      toast({ title: "Signup failed", description: error.message, variant: "destructive" });
-    } else {
-      if (data.session) {
-        navigate("/dashboard");
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: fullName },
+          emailRedirectTo: `${window.location.origin}/login?message=Please confirm your email`,
+        },
+      });
+      
+      if (error) {
+        console.error("Signup error:", error);
+        let errorMessage = error.message;
+        
+        // Provide better error messages
+        if (error.message.includes("User already registered")) {
+          errorMessage = "An account with this email already exists. Please try logging in.";
+        } else if (error.message.includes("Password should be at least")) {
+          errorMessage = "Password must be at least 8 characters long.";
+        } else if (error.message.includes("Invalid email")) {
+          errorMessage = "Please enter a valid email address.";
+        }
+        
+        toast({ 
+          title: "Signup failed", 
+          description: errorMessage, 
+          variant: "destructive" 
+        });
       } else {
-        toast({ title: "Account created!", description: "Check your email to verify your account." });
+        console.log("Signup successful:", data);
+        if (data.session) {
+          toast({ 
+            title: "Account created!", 
+            description: "Welcome to BG Remover!", 
+          });
+          navigate("/dashboard");
+        } else {
+          toast({ 
+            title: "Account created!", 
+            description: "Please check your email to confirm your account.", 
+          });
+        }
       }
+    } catch (error) {
+      console.error("Unexpected signup error:", error);
+      toast({ 
+        title: "Signup failed", 
+        description: "An unexpected error occurred. Please try again.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogle = async () => {
-    const { error } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/~oauth/initiate`,
-    });
-    if (error) {
-      toast({ title: "Google signup failed", description: String(error), variant: "destructive" });
+  setLoading(true);
+  
+  try {
+    const result = await signInWithGoogle();
+    
+    if (result.success) {
+      toast({ 
+        title: "Redirecting to Google...", 
+        description: "Please complete the sign-in process in your browser.", 
+      });
+    } else {
+      console.error("Google signup failed:", result.error);
+      
+      let errorMessage = result.error || "Unable to connect with Google";
+      
+      // Show suggestions if available
+      if (result.suggestions && result.suggestions.length > 0) {
+        errorMessage += "\n\nSuggestions:\n" + result.suggestions.map(s => `• ${s}`).join('\n');
+      }
+      
+      toast({ 
+        title: "Google signup failed", 
+        description: errorMessage,
+        variant: "destructive" 
+      });
     }
-  };
+  } catch (error) {
+    console.error("Unexpected Google signup error:", error);
+    toast({ 
+      title: "Google signup failed", 
+      description: "An unexpected error occurred. Please try again or use email signup.",
+      variant: "destructive" 
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <PublicLayout>
