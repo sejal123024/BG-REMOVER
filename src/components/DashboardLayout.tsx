@@ -1,8 +1,7 @@
 import { ReactNode } from "react";
 import Navbar from "./Navbar";
-import Footer from "./Footer";
 
-const PublicLayout = ({ children }: { children: ReactNode }) => (
+const DashboardLayout = ({ children }: { children: ReactNode }) => (
   <div className="min-h-screen flex flex-col bg-background">
     <Navbar />
     <main className="flex-1 pt-20 pb-8 px-4 sm:px-6 lg:px-8">
@@ -10,8 +9,7 @@ const PublicLayout = ({ children }: { children: ReactNode }) => (
         {children}
       </div>
     </main>
-    <Footer />
   </div>
 );
 
-export default PublicLayout;
+export default DashboardLayout;

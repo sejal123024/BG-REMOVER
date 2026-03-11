@@ -6,9 +6,10 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Landing from "./pages/Landing";
-import Pricing from "./pages/Pricing";
 import Features from "./pages/Features";
-
+import About from "./pages/About";
+import SettingsPage from "./pages/SettingsPage";
+import Contact from "./pages/Contact";
 import UploadWorkspace from "./pages/UploadWorkspace";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
@@ -30,8 +31,10 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/features" element={<Features />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/contact" element={<Contact />} />
             
-            <Route path="/pricing" element={<Pricing />} />
             <Route path="/~oauth/initiate" element={<OAuthInitiate />} />
             <Route path="/upload" element={<ProtectedRoute><UploadWorkspace /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
